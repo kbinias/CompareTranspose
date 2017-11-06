@@ -4,6 +4,10 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
+      <itemPath>avx2.h</itemPath>
+      <itemPath>regular.h</itemPath>
+      <itemPath>sse_byte.h</itemPath>
+      <itemPath>sse_float.h</itemPath>
     </logicalFolder>
     <logicalFolder name="ResourceFiles"
                    displayName="Resource Files"
@@ -37,10 +41,18 @@
       <compileType>
         <ccTool>
           <standard>8</standard>
-          <commandLine>-fopenmp -lpthread</commandLine>
+          <commandLine>-fopenmp -lpthread -msse4.1</commandLine>
         </ccTool>
       </compileType>
+      <item path="avx2.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="regular.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sse_byte.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sse_float.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
     <conf name="Release" type="1">
@@ -65,7 +77,15 @@
           <developmentMode>5</developmentMode>
         </asmTool>
       </compileType>
+      <item path="avx2.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="regular.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sse_byte.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="sse_float.h" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
   </confs>

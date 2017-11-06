@@ -42,8 +42,8 @@ OBJECTFILES= \
 CFLAGS=
 
 # CC Compiler Flags
-CCFLAGS=-fopenmp -lpthread
-CXXFLAGS=-fopenmp -lpthread
+CCFLAGS=-fopenmp -lpthread -msse4.1
+CXXFLAGS=-fopenmp -lpthread -msse4.1
 
 # Fortran Compiler Flags
 FFLAGS=

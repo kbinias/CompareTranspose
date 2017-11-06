@@ -1,3 +1,5 @@
+// Based on: https://stackoverflow.com/questions/16737298/what-is-the-fastest-way-to-transpose-a-matrix-in-c
+
 #include <cstdlib>
 #include <iostream>
 #include <stdint.h>
@@ -6,111 +8,93 @@
 #include <stdint.h>
 #include <errno.h>
 #include <chrono>
-#include <omp.h>
-#include <xmmintrin.h>
 
-using namespace std;
-
-typedef uint8_t  TEST_TYPE;
+#include "regular.h"
+#include "sse_float.h"
+#include "sse_byte.h"
 
 #define ROUND_UP(x, s) (((x)+((s)-1)) & -(s))
 
-// Naive
-template<typename T>
-T *transpose_naive(const T *src, int rows, int cols) {
-    int prod = rows*cols;
-    T* dest = new T [prod];
+using namespace std;
 
-    for(int m = 0; m<prod; m++) {
-        int i = m/rows;
-        int j = m%rows;
-        dest[m] = src[i + cols*j];
-    }
 
-    return dest;
-}
-
-// Naive + parallel
-template<typename T>
-T *transpose_parallel(const T *src, int rows, int cols) {
-    int prod = rows*cols;
-    T* dest = new T [prod];
-
-    #pragma omp parallel for
-    for(int m = 0; m<prod; m++) {
-        int i = m/rows;
-        int j = m%rows;
-        dest[m] = src[i + cols*j];
-    }
-
-    return dest;
-}
-
-inline void transpose4x4_SSE(float *A, float *B, const int lda, const int ldb) {
-    __m128 row1 = _mm_load_ps(&A[0*lda]);
-    __m128 row2 = _mm_load_ps(&A[1*lda]);
-    __m128 row3 = _mm_load_ps(&A[2*lda]);
-    __m128 row4 = _mm_load_ps(&A[3*lda]);
-     _MM_TRANSPOSE4_PS(row1, row2, row3, row4);
-     _mm_store_ps(&B[0*ldb], row1);
-     _mm_store_ps(&B[1*ldb], row2);
-     _mm_store_ps(&B[2*ldb], row3);
-     _mm_store_ps(&B[3*ldb], row4);
-}
-
-// Intrinsics + parallel
-inline void transpose_block_SSE4x4(float *A, float *B, const int n, const int m, const int lda, const int ldb ,const int block_size) {
-    #pragma omp parallel for
-    for(int i=0; i<n; i+=block_size) {
-        for(int j=0; j<m; j+=block_size) {
-            int max_i2 = i+block_size < n ? i + block_size : n;
-            int max_j2 = j+block_size < m ? j + block_size : m;
-            for(int i2=i; i2<max_i2; i2+=4) {
-                for(int j2=j; j2<max_j2; j2+=4) {
-                    transpose4x4_SSE(&A[i2*lda +j2], &B[j2*ldb + i2], lda, ldb);
-                }
-            }
-        }
+void print_data(uint8_t* data, size_t rows, size_t cols) {
+    for(size_t i=0; i<rows*cols; i++) {
+        cout << (int)data[i] << " ";
+        if(!((i+1) % rows)) cout << endl;
     }
 }
 
-// Based on: https://stackoverflow.com/questions/16737298/what-is-the-fastest-way-to-transpose-a-matrix-in-c
+void print_separator(size_t size, bool add_endl = true) {
+    for(size_t i=0; i<size; i++) cout << "*";
+    cout << endl;
+}
+
 int main(int argc, char** argv) {
-    int output_size = 10;
-    int rows = 128, cols = 3*224*224; // Resnet
-    auto *data = new TEST_TYPE[rows*cols];
-    
-    for(int i=1; i<=output_size; i++) data[i-1] = i;
-    
-    // Naive
-    auto start_time = chrono::high_resolution_clock::now();
-    auto trans = transpose_naive<TEST_TYPE>((TEST_TYPE*)data, rows, cols);
-    auto end_time = chrono::high_resolution_clock::now();
-    cout << "Naive: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
-    delete trans;
+    //int rows = 128, cols = 3*224*224; // Resnet
+    int rows = 16, cols = 16; // Test
+    int size = rows*cols;
+    auto *data_in = new uint8_t[size];
+    auto *data_out = new uint8_t[size];
 
-    // Naive + parallel
+    for(int i=1; i<=size; i++) data_in[i-1] = i;
+
+    // Regular
+    auto start_time = chrono::high_resolution_clock::now();
+    Transpose::Regular::transpose<uint8_t>(data_out, data_in, rows, cols);
+    auto end_time = chrono::high_resolution_clock::now();
+    cout << "Regular: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
+
+    // Regular + parallel
     start_time = chrono::high_resolution_clock::now();
-    trans = transpose_parallel<TEST_TYPE>((TEST_TYPE*)data, rows, cols);
+    Transpose::Regular::transpose_parallel<uint8_t>(data_out, data_in, rows, cols);
     end_time = chrono::high_resolution_clock::now();
-    cout << "Parallel: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
-    delete trans;
-    
-    // Intrinsics + parallel
-    auto *dataInF = new float[rows*cols];
-    auto *dataOutF = new float[rows*cols];
+    cout << "Regular parallel: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
+
+/*    
+    // Intrinsics + SSE + float
+    auto *dataInF = new TEST_TYPE[rows*cols];
+    auto *dataOutF = new TEST_TYPE[rows*cols];
     int lda = ROUND_UP(cols, 16);
     int ldb = ROUND_UP(rows, 16);
     int block_size = 64;
     for(int i=1; i<=output_size; i++) dataInF[i-1] = i;
     start_time = chrono::high_resolution_clock::now();
-    transpose_block_SSE4x4(dataInF, dataOutF, rows, cols, lda, ldb, block_size);
+    Transpose::SSE::transpose((float*)dataInF, (float*)dataOutF, rows, cols, lda, ldb, block_size);
     end_time = chrono::high_resolution_clock::now();
     cout << "Intrinsics: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
     delete dataInF;
     delete dataOutF;
+*/
 
-    delete data;
+    // SSE for byte
+    start_time = chrono::high_resolution_clock::now();
+    Transpose::SSE::transpose(data_out, data_in, rows, cols);
+    end_time = chrono::high_resolution_clock::now();
+    cout << "SSE: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
+    print_data(data_in, rows, cols);
+    print_separator(cols);
+    print_data(data_out, rows, cols);
+
+/*
+    // AVX2
+//    dataInF = new float[rows*cols];
+//    dataOutF = new float[rows*cols];
+//    lda = ROUND_UP(cols, 16);
+//    ldb = ROUND_UP(rows, 16);
+//    block_size = 64;
+//    for(int i=1; i<=output_size; i++) dataInF[i-1] = i;
+//    start_time = chrono::high_resolution_clock::now();
+//    cout << rows << " " << cols << " " << endl;
+//    transpose_block_AVX2(dataInF, dataOutF, rows, cols, lda, ldb, block_size);
+//    end_time = chrono::high_resolution_clock::now();
+//    cout << "Intrinsics: " << chrono::duration_cast<chrono::microseconds>(end_time - start_time).count() << endl;
+//    delete dataInF;
+//    delete dataOutF;
+*/
+
+    delete[] data_in;
+    delete[] data_out;
 
     return 0;
 }
